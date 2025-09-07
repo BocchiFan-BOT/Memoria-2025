@@ -1,0 +1,57 @@
+# --- Python / FastAPI ---
+backend/venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+.env
+.env.*
+.venv
+# Modelos/weights locales (no subir)
+*.pt
+
+# Ignorar entornos virtuales
+venv/
+*/venv/
+.venv/
+
+# --- Frontend (Node / React / Vue / Angular) ---
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.next/
+frontend/.nuxt/
+frontend/.cache/
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# testing
+/coverage
+
+# production
+/build
+
+# misc
+.DS_Store
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- SO / Editor ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# --- Cachés ---
+dist/
+build/
