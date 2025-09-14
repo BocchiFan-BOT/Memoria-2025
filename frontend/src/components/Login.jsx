@@ -6,40 +6,59 @@ export default function Login({ onSuccess }) {
   const [pass, setPass] = useState("");
   const [error, setError] = useState("");
 
-  const handleSubmit = async e => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setError("");
     try {
-      await login(user, pass); // llamada al backend
+      await login(user, pass);
       onSuccess();
-    } catch (err) {
-      setError("❌ Acceso denegado");
+    } catch {
+      setError("Acceso denegado. Verifica usuario/contraseña.");
     }
   };
 
   return (
-    <div className="login-container">
-      <h2>Iniciar Sesión</h2>
-      <form onSubmit={handleSubmit}>
-        <input
-          type="text"
-          placeholder="Usuario"
-          value={user}
-          onChange={e => setUser(e.target.value)}
-          required
-        />
-        <br />
-        <input
-          type="password"
-          placeholder="Contraseña"
-          value={pass}
-          onChange={e => setPass(e.target.value)}
-          required
-        />
-        <br />
-        <button type="submit">Ingresar</button>
-      </form>
-      {error && <p style={{ color: "red" }}>{error}</p>}
+    <div className="login-shell">
+    <div className="login-card" role="region" aria-label="Formulario de inicio de sesión">
+      <div className="login-header" style={{ display: "flex", alignItems: "center" }}>
+        <h1 className="login-title" style={{ flexGrow: 1 }}>Monitoreo de aglomeraciones</h1>
+      </div>
+      <p className="login-subtitle">Accede para visualizar en tiempo real</p>
+
+        <form className="login-form" onSubmit={handleSubmit}>
+          <label htmlFor="user">Usuario</label>
+          <input
+            id="user"
+            className="login-input"
+            type="text"
+            placeholder="Ingresa tu usuario"
+            value={user}
+            onChange={(e) => setUser(e.target.value)}
+            required
+            autoFocus
+            autoComplete="username"
+          />
+
+          <label htmlFor="pass">Contraseña</label>
+          <input
+            id="pass"
+            className="login-input"
+            type="password"
+            placeholder="••••••••"
+            value={pass}
+            onChange={(e) => setPass(e.target.value)}
+            required
+            autoComplete="current-password"
+          />
+
+          <div className="login-actions">
+            <button className="login-btn" type="submit">Ingresar</button>
+            {error && <span className="login-error">{error}</span>}
+          </div>
+        </form>
+
+        <p className="login-foot">Acceso restringido</p>
+      </div>
     </div>
   );
 }
-
