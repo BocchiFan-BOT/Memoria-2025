@@ -13,7 +13,6 @@ export default function Dashboard() {
   );
 
   useEffect(() => {
-    // reloj en vivo
     const clock = setInterval(() => {
       setNowStr(
         new Intl.DateTimeFormat("es-CL", {
@@ -23,7 +22,6 @@ export default function Dashboard() {
       );
     }, 1000);
 
-    // actualizar conteo cada 0.5s
     const i1 = setInterval(async () => {
       try {
         const res = await getCount();
@@ -31,7 +29,6 @@ export default function Dashboard() {
       } catch {}
     }, 500);
 
-    // actualizar gráfico cada 2s
     const i2 = setInterval(async () => {
       try {
         const res = await getHistory();
@@ -91,7 +88,7 @@ export default function Dashboard() {
         </LineChart>
       </div>
 
-      {/* Botón de descarga mejorado */}
+      {/* Botón de descarga*/}
       <button className="btn-download" onClick={downloadReport} aria-label="Descargar reporte CSV">
         <span className="btn-icon" aria-hidden>⬇</span>
         Descargar reporte CSV

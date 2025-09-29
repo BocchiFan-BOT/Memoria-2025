@@ -11,7 +11,7 @@
   --shadow: 0 12px 30px rgba(0,0,0,0.08);
 }
 
-/* Fuente elegante tipo Times */
+
 body{
   margin:0;
   font-family: "Times New Roman", Times, serif;
@@ -22,16 +22,16 @@ body{
     var(--bg);
 }
 
-/* Contenedor centrado */
+
 .login-shell{
   min-height: 100vh;
   display:grid;
   place-items:center;
   padding: 32px 16px;
-  position: relative; /* para posicionar el badge flotante si quisieras relativo */
+  position: relative; 
 }
 
-/* Tarjeta */
+
 .login-card{
   width:min(680px, 94vw);
   background: repeating-linear-gradient(
@@ -48,7 +48,7 @@ body{
 }
 
 
-/* Header: título a la izquierda */
+
 .login-title{
   font-size: clamp(24px, 2.6vw, 32px);
   margin:0 0 6px 0;
@@ -61,9 +61,9 @@ body{
   font-size: 1.05rem;
 }
 
-/* Badge dentro del header del recuadro */
+
 .login-floating-badge {
-  margin-left: auto;  /* empuja hacia la derecha */
+  margin-left: auto;  
   width: 52px;
   height: 52px;
   border-radius: 12px;
@@ -78,18 +78,18 @@ body{
   box-shadow: 0 6px 16px rgba(0,0,0,0.15);
   background: linear-gradient(
     to bottom,
-    #1d4ed8 0%,   /* azul */
+    #1d4ed8 0%,   
     #2563eb 33%,
-    #facc15 33%,  /* amarillo */
+    #facc15 33%,  
     #facc15 66%,
-    #dc2626 66%,  /* rojo */
+    #dc2626 66%,  
     #b91c1c 100%
   );
 }
 
 
 
-/* Formulario */
+
 .login-form label{
   display:block;
   font-size: 1rem;
@@ -112,7 +112,7 @@ body{
   box-shadow: 0 0 0 4px var(--ring);
 }
 
-/* Botón */
+
 .login-actions{
   margin-top: 20px;
   display:flex;
@@ -134,14 +134,14 @@ body{
 .login-btn:hover{ background: var(--primary-700); }
 .login-btn:active{ transform: translateY(1px); }
 
-/* Error */
+
 .login-error{
   margin-top: 8px;
   color: var(--danger);
   font-weight: 700;
 }
 
-/* Pie */
+
 .login-foot{
   margin-top: 26px;
   color: var(--muted);
@@ -149,7 +149,7 @@ body{
   text-align:center;
 }
 
-/* Mantengo dashboard centrado y con tarjeta */
+
 .dashboard{
   max-width: 960px;
   margin: 3rem auto;
@@ -190,7 +190,7 @@ body{
   font-style: italic;
 }
 
-/* --- Fondo con textura sutil (franjas claras) para el contenedor del dashboard --- */
+
 .dashboard{
   max-width: 960px;
   margin: 3rem auto;
