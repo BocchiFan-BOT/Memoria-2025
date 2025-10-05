@@ -1,4 +1,4 @@
-// frontend/src/components/CameraManager.jsx
+// frontend/src/components/CamaraManager.jsx
 import React, { useState } from "react";
 
 export default function CameraManager({ cameras, setCameras }) {
@@ -6,18 +6,43 @@ export default function CameraManager({ cameras, setCameras }) {
 
   const onChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
-  const add = () => {
-    if (!form.name || !form.url) { alert("Nombre y URL son obligatorios"); return; }
+  const add = async () => {
+    if (!form.name || !form.url) {
+      alert("Nombre y URL son obligatorios");
+      return;
+    }
     const id = Date.now().toString();
     const newCam = { id, ...form };
+
+    // 1. Actualizar frontend
     const updated = [...cameras, newCam];
-    setCameras(updated, true);
+    setCameras(updated, false);
+
+    // 2. Enviar al backend para que cree el VideoProcessor
+    try {
+      await fetch("http://localhost:8000/cameras/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newCam),
+      });
+    } catch (err) {
+      console.error("Error registrando cámara en backend:", err);
+    }
+
     setForm({ name: "", url: "", location: "", coordinates: "" });
   };
 
-  const remove = (id) => {
-    const updated = cameras.filter(c => c.id !== id);
-    setCameras(updated, true);
+  const remove = async (id) => {
+    const updated = cameras.filter((c) => c.id !== id);
+    setCameras(updated, false);
+
+    try {
+      await fetch(`http://localhost:8000/cameras/remove/${id}`, {
+        method: "DELETE",
+      });
+    } catch (err) {
+      console.error("Error eliminando cámara en backend:", err);
+    }
   };
 
   return (
@@ -35,15 +60,15 @@ export default function CameraManager({ cameras, setCameras }) {
 
       <h3>Cámaras configuradas</h3>
       <ul className="camera-list">
-        {cameras.map(cam => (
+        {cameras.map((cam) => (
           <li key={cam.id} className="camera-item">
             <div>
-              <strong>{cam.name}</strong> <br/>
+              <strong>{cam.name}</strong> <br />
               <span>{cam.location} {cam.coordinates ? `- ${cam.coordinates}` : ""}</span>
               <div className="small">{cam.url}</div>
             </div>
             <div>
-              <button className="btn btn-danger" onClick={()=>remove(cam.id)}>Eliminar</button>
+              <button className="btn btn-danger" onClick={() => remove(cam.id)}>Eliminar</button>
             </div>
           </li>
         ))}
@@ -51,4 +76,5 @@ export default function CameraManager({ cameras, setCameras }) {
     </div>
   );
 }
+
 

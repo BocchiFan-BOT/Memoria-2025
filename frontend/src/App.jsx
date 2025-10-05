@@ -8,18 +8,18 @@ import "./index.css";
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [cameras, setCameras] = useState([]); // lista local, sincronizable con backend
+  const [cameras, setCameras] = useState([]); 
   const [tab, setTab] = useState("monitoreo");
 
   useEffect(() => {
-    // al iniciar, pedir lista de cámaras al backend (si existe)
+    // Obtener lista de cámaras del backend
     fetch("http://localhost:8000/cameras")
       .then((r) => r.json())
       .then((data) => {
         if (Array.isArray(data)) setCameras(data);
       })
       .catch(() => {
-        // backend quizá no expuesto aún; mantener vacío.
+        console.warn("No se pudo obtener la lista de cámaras al iniciar");
       });
   }, []);
 
@@ -36,9 +36,24 @@ function App() {
       <header className="app-header">
         <h1>Monitor de Afluencia - Memoria</h1>
         <nav className="app-nav">
-          <button className={tab==="monitoreo" ? "active":""} onClick={()=>setTab("monitoreo")}>Cámaras</button>
-          <button className={tab==="dashboards" ? "active":""} onClick={()=>setTab("dashboards")}>Dashboards</button>
-          <button className={tab==="manager" ? "active":""} onClick={()=>setTab("manager")}>Agregar / Eliminar</button>
+          <button
+            className={tab === "monitoreo" ? "active" : ""}
+            onClick={() => setTab("monitoreo")}
+          >
+            Cámaras
+          </button>
+          <button
+            className={tab === "dashboards" ? "active" : ""}
+            onClick={() => setTab("dashboards")}
+          >
+            Dashboards
+          </button>
+          <button
+            className={tab === "manager" ? "active" : ""}
+            onClick={() => setTab("manager")}
+          >
+            Agregar / Eliminar
+          </button>
         </nav>
       </header>
 
@@ -48,17 +63,7 @@ function App() {
         {tab === "manager" && (
           <CameraManager
             cameras={cameras}
-            setCameras={(newList, persist=true) => {
-              setCameras(newList);
-              // intentar persistir al backend
-              if (persist) {
-                fetch("http://localhost:8000/cameras", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify(newList),
-                }).catch(()=>{/* no crítico */});
-              }
-            }}
+            setCameras={(newList) => setCameras(newList)} // ahora no hace fetch aquí
           />
         )}
       </main>
@@ -71,6 +76,7 @@ function App() {
 }
 
 export default App;
+
 
 
 

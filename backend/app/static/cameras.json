@@ -1,0 +1,16 @@
+[
+  {
+    "id": "1759349745495",
+    "name": "Panama, Hospital",
+    "url": "http://200.46.196.243/mjpg/video.mjpg",
+    "location": "Panama",
+    "coordinates": "8.993600, -79.519730"
+  },
+  {
+    "id": "1759349784003",
+    "name": "Saint Petersburg, Russian Federation",
+    "url": "http://89.104.109.62:8081/mjpg/video.mjpg",
+    "location": "Panama",
+    "coordinates": "59.894440 , 30.264170"
+  }
+]

@@ -5,9 +5,8 @@ from .video_processor import VideoProcessor
 CAMERAS_FILE = os.path.join(os.path.dirname(__file__), "static", "cameras.json")
 _lock = threading.Lock()
 
-# in-memory cameras list: dict id -> {id,name,url,location,coordinates}
-_cameras = {}
-_processors = {}
+_cameras = {}       # id -> camera dict
+_processors = {}    # id -> VideoProcessor instance
 
 def load_from_disk():
     try:
@@ -32,8 +31,16 @@ def list_cameras():
         return list(_cameras.values())
 
 def add_camera(cam):
+    # cam is a dict with keys id, name, url, location, coordinates (optional)
     with _lock:
         _cameras[cam['id']] = cam
+        # create processor if possible
+        try:
+            if cam['id'] not in _processors:
+                _processors[cam['id']] = VideoProcessor(cam['url'])
+        except Exception:
+            # if processor cannot open the source, it will raise; we still persist camera
+            pass
         persist_to_disk()
 
 def remove_camera(cam_id):
@@ -59,11 +66,11 @@ def get_processor(cam_id, create_if_missing=True):
         if not cam or not create_if_missing:
             return None
         try:
-            vp = VideoProcessor(source=cam['url'])
+            vp = VideoProcessor(cam['url'])
             _processors[cam_id] = vp
             return vp
         except Exception:
             return None
 
-# Load cameras on import
+# load cameras on import
 load_from_disk()
