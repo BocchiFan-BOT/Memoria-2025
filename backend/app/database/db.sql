@@ -1,11 +1,11 @@
 CREATE TABLE camaras (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  public_id VARCHAR(32) NOT NULL,              -- tu "id" del frontend (p.ej. "1759349745495")
+  public_id VARCHAR(32) NOT NULL,              
   name VARCHAR(120) NOT NULL,
-  url VARCHAR(600) NOT NULL,                    -- soporta rtsp / http / hls
+  url VARCHAR(600) NOT NULL,                    
   location VARCHAR(120) NULL,
-  latitude DECIMAL(9,6) NULL,                   -- -90..90 con 6 decimales
-  longitude DECIMAL(9,6) NULL,                  -- -180..180 con 6 decimales
+  latitude DECIMAL(9,6) NULL,                  
+  longitude DECIMAL(9,6) NULL,                  
   status ENUM('ACTIVE','INACTIVE') DEFAULT 'ACTIVE',
   is_online TINYINT(1) NOT NULL DEFAULT 0,      -- 0/1
   last_heartbeat DATETIME NULL,                 -- último ping/healthcheck

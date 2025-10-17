@@ -17,8 +17,8 @@ from .database import schemas
 
 _lock = threading.Lock()
 
-# Cache solo de procesadores de video (se mantiene igual)
-_processors: Dict[str, VideoProcessor] = {}  # public_id -> VideoProcessor
+
+_processors: Dict[str, VideoProcessor] = {}  
 
 
 def list_cameras():
