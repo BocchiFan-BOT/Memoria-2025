@@ -1,6 +1,10 @@
 fastapi
 uvicorn[standard]
-python-multipart      # para form login
+python-multipart
 opencv-python
-pandas                # para CSV
+pandas
 ultralytics
+SQLAlchemy
+PyMySQL
+python-dotenv
+python-jose[cryptography]
