@@ -1,4 +1,3 @@
-# backend/app/main.py
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -6,8 +5,7 @@ from pathlib import Path
 from sqlalchemy.exc import IntegrityError
 import time
 from pathlib import Path
-
-
+from sqlalchemy import text 
 from app.config import CORS_ORIGINS
 from app.background_task import start_heartbeat_thread
 from app.database.database import SessionLocal
@@ -17,10 +15,10 @@ from .camera_manager import list_cameras, add_camera, remove_camera, get_process
 
 app = FastAPI(title="Monitor Inteligente API", version="0.1.0")
 
-# Inicia el heartbeat (revisa cámaras cada ~30s en background)
+#revisa camaras cada 30 seg
 start_heartbeat_thread()
 
-# CORS (orígenes permitidos desde .env)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
@@ -28,22 +26,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------------------------
-#   AUTH (JWT)
-# ---------------------------
-# /auth/login → devuelve token
+#devuelve token
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
 
-# ---------------------------
-#   CAMERAS (lectura pública)
-# ---------------------------
+
+#camaras (lectura)
 @app.get("/cameras")
 def get_cameras():
     return list_cameras()
 
-# ---------------------------
-#   CAMERAS (escritura protegida con JWT)
-# ---------------------------
+#camaras 
 @app.post("/cameras")
 async def post_cameras(payload: list, user=Depends(admin_required)):
     """
@@ -68,9 +60,7 @@ def delete_camera(cam_id: str, user=Depends(admin_required)):
     remove_camera(cam_id)
     return {"status": "ok"}
 
-# ---------------------------
-#   STREAMING / MÉTRICAS (público)
-# ---------------------------
+#streaming
 @app.get("/stream/{cam_id}")
 def stream(cam_id: str):
     vp = get_processor(cam_id)
@@ -92,7 +82,6 @@ def stream(cam_id: str):
 
 @app.get("/count/{cam_id}")
 def count(cam_id: str):
-    # Si prefieres que cree el procesador automáticamente, cambia a create_if_missing=True
     vp = get_processor(cam_id, create_if_missing=False)
     if vp is None:
         return {"count": 0}
@@ -118,9 +107,7 @@ def report(cam_id: str):
         filename=f"reporte_{cam_id}.csv"
     )
 
-# ---------------------------
-#   SYNC (upsert, no destructivo) — protegido
-# ---------------------------
+#sync
 @app.post("/camaras/sync-file")
 def sync_camaras_from_file(user=Depends(admin_required)):
     """
@@ -172,11 +159,7 @@ def sync_camaras_from_payload(payload: list[dict], user=Depends(admin_required))
     finally:
         db.close()
 
-# ---------------------------
-#   HEALTH
-# ---------------------------
-# --- Endpoint de salud del sistema ---
-from sqlalchemy import text  # <-- agrégalo al inicio del archivo si no está
+
 
 @app.get("/health")
 def health_check():

@@ -49,7 +49,7 @@ def list_cameras():
 
 def add_camera(cam: dict):
     """
-    Inserta o actualiza (upsert) una cámara en la BD a partir del dict
+    Inserta o actualiza una cámara en la BD a partir del dict
     {id, name, url, location, coordinates?}. También inicia el VideoProcessor
     si no existe aún para ese public_id.
     """
