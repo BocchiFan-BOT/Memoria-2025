@@ -37,7 +37,7 @@ export default function CameraManager({ cameras, setCameras }) {
     setCameras(updated, false);
 
     try {
-      await fetch(`http://localhost:8000/cameras/remove/${id}`, {
+      await fetch(`http://localhost:8000/cameras/${id}`, {
         method: "DELETE",
       });
     } catch (err) {
