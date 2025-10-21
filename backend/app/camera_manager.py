@@ -1,76 +1,165 @@
-# backend/app/camera_manager.py
-import threading, json, os, time
+import threading
+from typing import Optional, Dict, Any
+
 from .video_processor import VideoProcessor
 
-CAMERAS_FILE = os.path.join(os.path.dirname(__file__), "static", "cameras.json")
+# ORM / CRUD
+from .database.crud import (
+    get_session,
+    get_camara_by_public_id,
+    get_camara_by_url,
+    create_camara,
+    update_camara,
+    delete_camara,
+    list_camaras as crud_list_camaras,
+)
+from .database import schemas
+
 _lock = threading.Lock()
 
-_cameras = {}       # id -> camera dict
-_processors = {}    # id -> VideoProcessor instance
 
-def load_from_disk():
-    try:
-        if os.path.exists(CAMERAS_FILE):
-            with open(CAMERAS_FILE, "r", encoding="utf-8") as f:
-                arr = json.load(f)
-                for c in arr:
-                    _cameras[c['id']] = c
-    except Exception:
-        pass
+_processors: Dict[str, VideoProcessor] = {}  
 
-def persist_to_disk():
-    try:
-        os.makedirs(os.path.dirname(CAMERAS_FILE), exist_ok=True)
-        with open(CAMERAS_FILE, "w", encoding="utf-8") as f:
-            json.dump(list(_cameras.values()), f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
 
 def list_cameras():
+    """
+    Devuelve la lista de cámaras desde la BD con el mismo formato
+    que espera el frontend: {id, name, url, location, coordinates}
+    """
     with _lock:
-        return list(_cameras.values())
-
-def add_camera(cam):
-    # cam is a dict with keys id, name, url, location, coordinates (optional)
-    with _lock:
-        _cameras[cam['id']] = cam
-        # create processor if possible
+        db = get_session()
         try:
-            if cam['id'] not in _processors:
-                _processors[cam['id']] = VideoProcessor(cam['url'])
-        except Exception:
-            # if processor cannot open the source, it will raise; we still persist camera
-            pass
-        persist_to_disk()
+            cams = crud_list_camaras(db, limit=1000)
+            out = []
+            for c in cams:
+                coords = None
+                if c.latitude is not None and c.longitude is not None:
+                    coords = f"{float(c.latitude):.6f}, {float(c.longitude):.6f}"
+                out.append({
+                    "id": c.public_id,
+                    "name": c.name,
+                    "url": c.url,
+                    "location": c.location,
+                    "coordinates": coords
+                })
+            return out
+        finally:
+            db.close()
 
-def remove_camera(cam_id):
+
+def add_camera(cam: dict):
+    """
+    Inserta o actualiza una cámara en la BD a partir del dict
+    {id, name, url, location, coordinates?}. También inicia el VideoProcessor
+    si no existe aún para ese public_id.
+    """
     with _lock:
-        if cam_id in _cameras:
-            _cameras.pop(cam_id)
+        db = get_session()
+        try:
+            # Validamos/normalizamos usando el esquema pensado para tu JSON
+            j = schemas.CamaraFromJSON.model_validate(cam)
+            lat, lon = j.lat_lon()
+
+            existing = get_camara_by_public_id(db, j.id) or get_camara_by_url(db, str(j.url))
+            if existing:
+                changes = schemas.CamaraUpdate(
+                    public_id=j.id,
+                    name=j.name,
+                    url=j.url,
+                    location=j.location,
+                    latitude=lat,
+                    longitude=lon,
+                )
+                update_camara(db, existing, changes)
+            else:
+                data = schemas.CamaraCreate(
+                    public_id=j.id,
+                    name=j.name,
+                    url=j.url,
+                    location=j.location,
+                    latitude=lat,
+                    longitude=lon,
+                )
+                create_camara(db, data)
+
+            # Levantar procesador si no existe aún
+            try:
+                if j.id not in _processors:
+                    _processors[j.id] = VideoProcessor(str(j.url))
+            except Exception:
+                # Si no se puede abrir la fuente, igual dejamos la cámara en BD
+                pass
+        finally:
+            db.close()
+
+
+def remove_camera(cam_id: str):
+    """
+    Elimina la cámara en BD por public_id y detiene su VideoProcessor si corre.
+    """
+    with _lock:
+        db = get_session()
+        try:
+            existing = get_camara_by_public_id(db, cam_id)
+            if existing:
+                delete_camara(db, existing)
+        finally:
+            db.close()
+
+        # Detener y limpiar procesador
         if cam_id in _processors:
             try:
                 _processors[cam_id].stop()
-            except:
+            except Exception:
                 pass
-            _processors.pop(cam_id)
-        persist_to_disk()
+            _processors.pop(cam_id, None)
 
-def get_camera(cam_id):
-    return _cameras.get(cam_id)
 
-def get_processor(cam_id, create_if_missing=True):
+def get_camera(cam_id: str) -> Optional[dict]:
+    """
+    Obtiene una cámara desde BD por public_id.
+    """
+    db = get_session()
+    try:
+        c = get_camara_by_public_id(db, cam_id)
+        if not c:
+            return None
+        coords = None
+        if c.latitude is not None and c.longitude is not None:
+            coords = f"{float(c.latitude):.6f}, {float(c.longitude):.6f}"
+        return {
+            "id": c.public_id,
+            "name": c.name,
+            "url": c.url,
+            "location": c.location,
+            "coordinates": coords
+        }
+    finally:
+        db.close()
+
+
+def get_processor(cam_id: str, create_if_missing: bool = True) -> Optional[VideoProcessor]:
+    """
+    Devuelve el VideoProcessor del public_id. Si no existe y create_if_missing=True,
+    lo crea leyendo la URL desde la BD.
+    """
     with _lock:
         if cam_id in _processors:
             return _processors[cam_id]
-        cam = _cameras.get(cam_id)
-        if not cam or not create_if_missing:
-            return None
-        try:
-            vp = VideoProcessor(cam['url'])
-            _processors[cam_id] = vp
-            return vp
-        except Exception:
+
+        if not create_if_missing:
             return None
 
-# load cameras on import
-load_from_disk()
+        db = get_session()
+        try:
+            c = get_camara_by_public_id(db, cam_id)
+            if not c:
+                return None
+            try:
+                vp = VideoProcessor(c.url)
+                _processors[cam_id] = vp
+                return vp
+            except Exception:
+                return None
+        finally:
+            db.close()

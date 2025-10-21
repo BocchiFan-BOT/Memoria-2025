@@ -1,0 +1,9 @@
+[
+  {
+    "id": "9999999999999",
+    "name": "Nueva cámara de prueba",
+    "url": "http://89.104.109.62:8081/mjpg/video.mjpg",
+    "location": "Chile",
+    "coordinates": "-33.4489, -70.6693"
+  }
+]
