@@ -18,3 +18,4 @@ ADMIN_PASS = os.getenv("ADMIN_PASS", "admin")
 JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-me")
 JWT_ALG = os.getenv("JWT_ALG", "HS256")
 JWT_EXPIRE_MIN = int(os.getenv("JWT_EXPIRE_MIN", "60"))
+

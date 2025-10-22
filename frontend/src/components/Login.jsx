@@ -1,29 +1,38 @@
+// src/components/Login.jsx
 import { useState } from "react";
-import { login } from "../services/api";
+import { login, setAuthToken } from "../services/api";
 
 export default function Login({ onSuccess }) {
   const [user, setUser] = useState("");
   const [pass, setPass] = useState("");
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setSubmitting(true);
     try {
-      await login(user, pass);
-      onSuccess();
-    } catch {
-      setError("Acceso denegado. Verifica usuario/contraseña.");
+      const res = await login(user, pass);        // POST /auth/login
+      const { access_token } = res.data || {};
+      if (!access_token) throw new Error("Sin token en la respuesta");
+      setAuthToken(access_token);                 // guarda token y setea Authorization
+      onSuccess?.();                              // navega al dashboard
+    } catch (err) {
+      const msg = err?.response?.data?.detail || "Acceso denegado. Verifica usuario/contraseña.";
+      setError(msg);
+    } finally {
+      setSubmitting(false);
     }
   };
 
   return (
     <div className="login-shell">
-    <div className="login-card" role="region" aria-label="Formulario de inicio de sesión">
-      <div className="login-header" style={{ display: "flex", alignItems: "center" }}>
-        <h1 className="login-title" style={{ flexGrow: 1 }}>Monitoreo de aglomeraciones</h1>
-      </div>
-      <p className="login-subtitle">Accede para visualizar en tiempo real</p>
+      <div className="login-card" role="region" aria-label="Formulario de inicio de sesión">
+        <div className="login-header" style={{ display: "flex", alignItems: "center" }}>
+          <h1 className="login-title" style={{ flexGrow: 1 }}>Monitoreo de aglomeraciones</h1>
+        </div>
+        <p className="login-subtitle">Accede para visualizar en tiempo real</p>
 
         <form className="login-form" onSubmit={handleSubmit}>
           <label htmlFor="user">Usuario</label>
@@ -31,11 +40,9 @@ export default function Login({ onSuccess }) {
             id="user"
             className="login-input"
             type="text"
-            placeholder="Ingresa tu usuario"
             value={user}
             onChange={(e) => setUser(e.target.value)}
             required
-            autoFocus
             autoComplete="username"
           />
 
@@ -44,7 +51,6 @@ export default function Login({ onSuccess }) {
             id="pass"
             className="login-input"
             type="password"
-            placeholder="••••••••"
             value={pass}
             onChange={(e) => setPass(e.target.value)}
             required
@@ -52,7 +58,9 @@ export default function Login({ onSuccess }) {
           />
 
           <div className="login-actions">
-            <button className="login-btn" type="submit">Ingresar</button>
+            <button className="login-btn" type="submit" disabled={submitting}>
+              {submitting ? "Ingresando..." : "Ingresar"}
+            </button>
             {error && <span className="login-error">{error}</span>}
           </div>
         </form>

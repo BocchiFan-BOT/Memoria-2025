@@ -21,10 +21,12 @@ start_heartbeat_thread()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
+    allow_origins=CORS_ORIGINS,        # ["http://localhost:5173"]
+    allow_credentials=True,            # <--- agrega esta línea
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 #devuelve token
 app.include_router(auth_router, prefix="/auth", tags=["auth"])

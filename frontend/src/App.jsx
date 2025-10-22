@@ -69,7 +69,7 @@ function App() {
       </main>
 
       <footer className="app-footer">
-        <span>Usuario: admin | Contraseña: admin</span>
+        <span>© 2025 Monitor de Afluencia - UTFSM</span>
       </footer>
     </div>
   );
