@@ -15,12 +15,21 @@ Asegúrate de tener instaladas las siguientes herramientas:
 * **Python** (versión $\\geq 3.9$)  
 * **Node.js** (versión $\\geq 16$)  
 * **Git**
+* **MySQL Workbenck**
 
 ## **Configuración e instalación**
 
 ### **1\. Backend (FastAPI)**
 
 El backend maneja la lógica de la aplicación, el procesamiento de video con YOLOv8 y la comunicación con la base de datos.
+
+\# Montar BD
+- Correr MySQL Workbench con el puerto por defecto (3306)
+- Crear base de datos vacia ejecutando : CREATE DATABASE memoria;
+- Importar script .sql (crea la tabla automaticamete)
+
+\# Configurar el archivo .env
+Editar el archivo con las credenciales que corresponda (ajustar contraseña)
 
 \# Navegar al directorio del backend  
 cd backend
@@ -94,4 +103,5 @@ Write-Host "Ruta protegida ejecutada con éxito."
 | :---- | :---- |
 | **Usuario** | admin |
 | **Contraseña** | admin |
+
 
