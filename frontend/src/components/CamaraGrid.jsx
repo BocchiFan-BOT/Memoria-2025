@@ -1,26 +1,53 @@
 // frontend/src/components/CamaraGrid.jsx
 import React from "react";
 
-function CameraGrid({ cameras }) {
+export default function CamaraGrid({ cameras = [] }) {
+  if (!Array.isArray(cameras) || cameras.length === 0) {
+    return (
+      <p className="muted" style={{ textAlign: "center", marginTop: "2rem" }}>
+        No hay cámaras registradas.
+      </p>
+    );
+  }
+
   return (
-    <div className="grid grid-cols-2 gap-4 p-4">
+    <section className="camera-grid">
       {cameras.map((cam) => (
-        <div key={cam.id} className="bg-black rounded shadow-lg p-2">
-          <h3 className="text-white text-center">{cam.name}</h3>
-          {/* 🔴 en vez de usar cam.url usamos el backend */}
-          <img
-            src={`http://localhost:8000/stream/${cam.id}`}
-            alt={cam.name}
-            className="w-full h-64 object-cover"
-          />
-          <p className="text-sm text-gray-300 mt-2">
-            {cam.location} – {cam.coordinates}
-          </p>
-        </div>
+        <article key={cam.id} className="camera-card">
+          <header
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "8px",
+            }}
+          >
+            <strong>{cam.name || `Cámara ${cam.id}`}</strong>
+          </header>
+
+          {/* imagen del stream */}
+          <div className="cam-media">
+            <img
+              src={`http://localhost:8000/stream/${cam.id}`}
+              alt={cam.name}
+              className="camera-img"
+              onError={(e) => (e.currentTarget.style.opacity = 0.3)}
+            />
+          </div>
+
+          {(cam.location || cam.coordinates) && (
+            <footer
+              className="muted"
+              style={{ marginTop: "8px", fontSize: "0.8rem" }}
+            >
+              {cam.location}{" "}
+              {cam.coordinates && (
+                <span style={{ opacity: 0.8 }}>– {cam.coordinates}</span>
+              )}
+            </footer>
+          )}
+        </article>
       ))}
-    </div>
+    </section>
   );
 }
-
-export default CameraGrid;
-
