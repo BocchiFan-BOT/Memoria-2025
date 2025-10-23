@@ -5,6 +5,7 @@ import CameraManager from "./components/CamaraManager";
 import CameraGrid from "./components/CamaraGrid";
 import DashboardGrid from "./components/DashboardGrid";
 import "./index.css";
+import Alerts from "./components/Alerts";
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -33,6 +34,7 @@ function App() {
 
   return (
     <div className="app-root">
+      <Alerts />
       <header className="app-header">
         <h1>Monitor de Afluencia - Memoria</h1>
         <nav className="app-nav">

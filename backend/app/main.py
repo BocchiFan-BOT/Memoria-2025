@@ -11,7 +11,7 @@ from app.background_task import start_heartbeat_thread
 from app.database.database import SessionLocal
 from app.database import crud, schemas
 from app.auth import router as auth_router, admin_required
-from .camera_manager import list_cameras, add_camera, remove_camera, get_processor
+from .camera_manager import list_cameras, add_camera, remove_camera, get_processor, get_alerts
 
 app = FastAPI(title="Monitor Inteligente API", version="0.1.0")
 
@@ -108,6 +108,20 @@ def report(cam_id: str):
         media_type="text/csv",
         filename=f"reporte_{cam_id}.csv"
     )
+
+# alertas
+@app.get("/alerts")
+def alerts(since: float | None = None, cam_id: str | None = None):
+    """
+    Devuelve alertas recientes agregadas de todas las cámaras.
+    - since: timestamp epoch opcional para traer solo nuevas
+    - cam_id: opcional para filtrar por una cámara
+    """
+    try:
+        data = get_alerts(since=since, cam_id=cam_id)
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 #sync
 @app.post("/camaras/sync-file")

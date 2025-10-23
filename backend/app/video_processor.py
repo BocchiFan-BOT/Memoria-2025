@@ -4,7 +4,8 @@ from collections import deque
 import pandas as pd
 import os, logging, traceback
 import numpy as np
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict, Any
+from app.config import ALERT_COUNT_THRESHOLD, ALERT_OCC_THRESHOLD, ALERT_COOLDOWN_SEC
 
 # --- GPU / Torch ---
 try:
@@ -141,6 +142,8 @@ class VideoProcessor:
     def __init__(
         self,
         source,
+        cam_id: str = "",
+        cam_name: str = "",
         # --- Estandarización de salida ---
         output_size=(1280, 720),      # resolución estándar para todas las cámaras
         letterbox_resize=True,
@@ -165,6 +168,8 @@ class VideoProcessor:
         cache_cleanup_every=300
     ):
         self.source = source
+        self.cam_id = cam_id
+        self.cam_name = cam_name
         self.cap = cv2.VideoCapture(source)
         if not self.cap.isOpened():
             raise RuntimeError(f"No se pudo abrir la fuente: {source}")
@@ -225,6 +230,9 @@ class VideoProcessor:
         self.current_crowd_index = 0.0
         self.crowd_ema = None
         self.count_history = deque(maxlen=max_history)  # [(t, count, crowd)]
+        # Alertas
+        self.alerts = deque(maxlen=200)  # type: ignore[var-annotated]
+        self._last_alert_ts = 0.0
         self._stop = False
 
         # Tracker
@@ -474,6 +482,25 @@ class VideoProcessor:
                 if (now - self._window_start_t) >= self.metrics_interval_sec:
                     self._aggregate_and_commit_window()
 
+                # Generación de alertas (personas y/o índice de aglomeración)
+                try:
+                    crowd_pct = float(self.crowd_ema) * 100.0  # 0..100
+                    if (
+                        (person_count >= ALERT_COUNT_THRESHOLD)
+                        or (crowd_pct >= ALERT_OCC_THRESHOLD)
+                    ) and (now - self._last_alert_ts >= ALERT_COOLDOWN_SEC):
+                        alert = {
+                            "cam_id": self.cam_id or str(self.source),
+                            "cam_name": self.cam_name or str(self.source),
+                            "t": now,
+                            "count": int(person_count),
+                            "occupancy": round(crowd_pct, 1),
+                        }
+                        self.alerts.append(alert)
+                        self._last_alert_ts = now
+                except Exception:
+                    logger.debug("Fallo generando alerta: %s", traceback.format_exc())
+
                 # Descanso pequeño (evita busy-wait)
                 time.sleep(0.002)
 
@@ -516,6 +543,14 @@ class VideoProcessor:
     def export_csv(self, path):
         df = pd.DataFrame(self.get_history())
         df.to_csv(path, index=False)
+
+    def get_alerts(self, since_ts: float | None = None):
+        try:
+            if since_ts is None:
+                return list(self.alerts)
+            return [a for a in list(self.alerts) if a.get("t", 0) >= float(since_ts)]
+        except Exception:
+            return []
 
     def stop(self):
         self._stop = True

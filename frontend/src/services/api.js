@@ -28,3 +28,7 @@ if (saved) {
 export const getCount = () => API.get("/count");
 export const getHistory = () => API.get("/history");
 export const getReport = () => API.get("/report", { responseType: "blob" });
+
+// Alertas recientes (opcional ?since=epoch)
+export const getAlerts = (since) =>
+  API.get("/alerts", { params: since ? { since } : {} });

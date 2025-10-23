@@ -85,7 +85,7 @@ def add_camera(cam: dict):
             # Levantar procesador si no existe aún
             try:
                 if j.id not in _processors:
-                    _processors[j.id] = VideoProcessor(str(j.url))
+                    _processors[j.id] = VideoProcessor(str(j.url), cam_id=j.id, cam_name=j.name)
             except Exception:
                 # Si no se puede abrir la fuente, igual dejamos la cámara en BD
                 pass
@@ -156,10 +156,30 @@ def get_processor(cam_id: str, create_if_missing: bool = True) -> Optional[Video
             if not c:
                 return None
             try:
-                vp = VideoProcessor(c.url)
+                vp = VideoProcessor(c.url, cam_id=c.public_id, cam_name=c.name)
                 _processors[cam_id] = vp
                 return vp
             except Exception:
                 return None
         finally:
             db.close()
+
+
+def get_alerts(since: float | None = None, cam_id: Optional[str] = None):
+    """
+    Agrega alertas recientes de todos los VideoProcessor.
+    since: epoch seconds para filtrar (opcional)
+    cam_id: filtrar por cámara específica (opcional)
+    """
+    out = []
+    with _lock:
+        for cid, vp in _processors.items():
+            if cam_id and cid != cam_id:
+                continue
+            try:
+                out.extend(vp.get_alerts(since))
+            except Exception:
+                pass
+    # ordenar por tiempo asc
+    out.sort(key=lambda a: a.get("t", 0))
+    return out

@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+python-multipart
+opencv-python
+pandas
+ultralytics
+SQLAlchemy
+PyMySQL
+python-dotenv
+python-jose[cryptography]

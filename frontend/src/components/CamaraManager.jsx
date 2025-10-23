@@ -20,9 +20,13 @@ export default function CameraManager({ cameras, setCameras }) {
 
     // 2. Enviar al backend para que cree el VideoProcessor
     try {
+      const token = localStorage.getItem("auth_token");
       await fetch("http://localhost:8000/cameras/add", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify(newCam),
       });
     } catch (err) {
@@ -37,8 +41,10 @@ export default function CameraManager({ cameras, setCameras }) {
     setCameras(updated, false);
 
     try {
+      const token = localStorage.getItem("auth_token");
       await fetch(`http://localhost:8000/cameras/${id}`, {
         method: "DELETE",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
     } catch (err) {
       console.error("Error eliminando cámara en backend:", err);
