@@ -30,7 +30,7 @@ JWT_ALG = os.getenv("JWT_ALG", "HS256")
 JWT_EXPIRE_MIN = int(os.getenv("JWT_EXPIRE_MIN", "60"))
 
 # Alertas
-ALERT_COUNT_THRESHOLD = int(os.getenv("ALERT_COUNT_THRESHOLD", "10"))
+ALERT_COUNT_THRESHOLD = int(os.getenv("ALERT_COUNT_THRESHOLD", "50"))
 ALERT_OCC_THRESHOLD = float(os.getenv("ALERT_OCC_THRESHOLD", "10"))  # porcentaje 0-100
 ALERT_COOLDOWN_SEC = int(os.getenv("ALERT_COOLDOWN_SEC", "10"))
 

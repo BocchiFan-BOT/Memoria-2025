@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getCount, getHistory, getReport } from "../services/api";
 import { LineChart, Line, XAxis, YAxis, Tooltip } from "recharts";
+import CrowdBar from "./CrowdBar";
 
 export default function Dashboard() {
   const [count, setCount] = useState(0);
@@ -86,6 +87,7 @@ export default function Dashboard() {
           <Tooltip />
           <Line type="monotone" dataKey="count" stroke="#8884d8" />
         </LineChart>
+        <CrowdBar value={latestCrowd} height={300} />
       </div>
 
       {/* Botón de descarga*/}
