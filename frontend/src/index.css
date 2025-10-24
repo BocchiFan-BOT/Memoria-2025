@@ -367,3 +367,25 @@ fieldset, .form, .login-card { background: var(--card-bg); }
 .camera-item button:hover {
   background: #b91c1c;
 }
+
+/* --- íconos dentro de inputs --- */
+.input-icon { position: relative; display: flex; align-items: center; }
+.input-icon .icon {
+  position: absolute;
+  left: 12px;
+  color: var(--muted);
+  font-size: 16px;
+  pointer-events: none;
+}
+.input-icon .login-input { padding-left: 38px; }
+
+/* --- animación spinner --- */
+.spin {
+  margin-right: 8px;
+  animation: spin 1s linear infinite;
+  vertical-align: middle;
+}
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
