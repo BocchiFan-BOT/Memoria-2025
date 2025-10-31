@@ -2,9 +2,9 @@
 import React, { useEffect, useState } from "react";
 import { Line } from "react-chartjs-2";
 import Chart from "chart.js/auto";
-import CrowdBar from "./CrowdBar"; // <-- agrega esto
+import CrowdBar from "./CrowdBar";
 
-export default function DashboardGrid({ cameras }) {
+export default function DashboardGrid({ cameras = [] }) {
   const [histories, setHistories] = useState({});
 
   useEffect(() => {
@@ -15,26 +15,42 @@ export default function DashboardGrid({ cameras }) {
       cameras.forEach((cam) => {
         fetch(`http://localhost:8000/history/${cam.id}`)
           .then((r) => r.json())
-          .then((data) => { if (active) setHistories((h) => ({ ...h, [cam.id]: Array.isArray(data) ? data : [] })); })
+          .then((data) => {
+            if (!active) return;
+            setHistories((prev) => ({
+              ...prev,
+              [cam.id]: Array.isArray(data) ? data : [],
+            }));
+          })
           .catch(() => {});
       });
     };
 
     fetchAll();
-    const timer = setInterval(fetchAll, 5000); // <-- opcional
-    return () => { active = false; clearInterval(timer); };
+    const timer = setInterval(fetchAll, 5000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
   }, [cameras]);
 
-  if (!cameras || cameras.length === 0)
-    return <div className="empty">No hay dashboards (agrega cámaras primero)</div>;
+  if (!cameras || cameras.length === 0) {
+    return (
+      <p className="muted" style={{ textAlign: "center", marginTop: "2rem" }}>
+        No hay dashboards (agrega cámaras primero)
+      </p>
+    );
+  }
 
   return (
-    <div className="dash-grid">
+    <section className="dash-grid">
       {cameras.map((cam) => {
         const h = histories[cam.id] || [];
-        const labels = h.map((x) => new Date(x.t * 1000).toLocaleTimeString());
-        const counts = h.map((x) => x.count);
-        const lastCrowd = h.length ? Number(h[h.length - 1].crowd_index || 0) : 0; // <-- usa crowd_index
+        const labels = h.map((x) =>
+          x.t ? new Date(x.t * 1000).toLocaleTimeString() : "-"
+        );
+        const counts = h.map((x) => x.count ?? 0);
+        const lastCrowd = h.length ? Number(h[h.length - 1].crowd_index || 0) : 0;
 
         const data = {
           labels,
@@ -58,24 +74,40 @@ export default function DashboardGrid({ cameras }) {
             x: { ticks: { maxRotation: 0, autoSkip: true } },
             y: { beginAtZero: true, precision: 0 },
           },
-          plugins: { legend: { display: false }, tooltip: { intersect: false, mode: "index" } },
+          plugins: {
+            legend: { display: false },
+            tooltip: { intersect: false, mode: "index" },
+          },
         };
 
         return (
-          <div key={cam.id} className="dash-card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <h3 style={{ margin: 0 }}>{cam.name}</h3>
+          <article key={cam.id} className="dash-card">
+            <header className="dash-card-header">
+              <h3>{cam.name || `Cámara ${cam.id}`}</h3>
+              <span className="dash-card-sub">ID: {cam.id}</span>
+            </header>
 
-            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-              <div style={{ width: "100%", height: 240 }}>
+            <div className="dash-card-content">
+              <div className="chart-wrapper">
                 <Line data={data} options={options} />
               </div>
-
-              {/* Pila por cámara */}
-              <CrowdBar value={lastCrowd} height={220} />
+              <div className="pile-wrapper">
+                <CrowdBar value={lastCrowd} height={180} />
+              </div>
             </div>
-          </div>
+
+            <div className="dash-card-footer">
+              <button
+                type="button"
+                className="btn-report-small"
+                onClick={() => console.log("Reporte de cámara", cam.id)}
+              >
+                Descargar reporte
+              </button>
+            </div>
+          </article>
         );
       })}
-    </div>
+    </section>
   );
 }
