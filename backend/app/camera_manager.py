@@ -19,6 +19,8 @@ _lock = threading.Lock()
 
 
 _processors: Dict[str, VideoProcessor] = {}  
+# Umbrales en memoria por cámara (no persistentes)
+_thresholds: Dict[str, Dict[str, float]] = {}
 
 
 def list_cameras():
@@ -35,13 +37,21 @@ def list_cameras():
                 coords = None
                 if c.latitude is not None and c.longitude is not None:
                     coords = f"{float(c.latitude):.6f}, {float(c.longitude):.6f}"
-                out.append({
+                item = {
                     "id": c.public_id,
                     "name": c.name,
                     "url": c.url,
                     "location": c.location,
                     "coordinates": coords
-                })
+                }
+                # Adjunta, si existen, umbrales configurados en memoria
+                th = _thresholds.get(c.public_id)
+                if th:
+                    if "alert_count_threshold" in th:
+                        item["alert_count_threshold"] = th["alert_count_threshold"]
+                    if "alert_occ_threshold" in th:
+                        item["alert_occ_threshold"] = th["alert_occ_threshold"]
+                out.append(item)
             return out
         finally:
             db.close()
@@ -85,7 +95,33 @@ def add_camera(cam: dict):
             # Levantar procesador si no existe aún
             try:
                 if j.id not in _processors:
-                    _processors[j.id] = VideoProcessor(str(j.url), cam_id=j.id, cam_name=j.name)
+                    vp = VideoProcessor(str(j.url), cam_id=j.id, cam_name=j.name)
+                    _processors[j.id] = vp
+                else:
+                    vp = _processors[j.id]
+
+                # Umbrales opcionales por cámara desde el payload
+                ct = cam.get("alert_count_threshold")
+                ot = cam.get("alert_occ_threshold")
+                # Guarda en memoria
+                tmp: Dict[str, float] = {}
+                if ct is not None:
+                    try:
+                        tmp["alert_count_threshold"] = float(ct)
+                    except Exception:
+                        pass
+                if ot is not None:
+                    try:
+                        tmp["alert_occ_threshold"] = float(ot)
+                    except Exception:
+                        pass
+                if tmp:
+                    _thresholds[j.id] = {**_thresholds.get(j.id, {}), **tmp}
+                    # Aplica en el procesador
+                    vp.set_alert_thresholds(
+                        count_threshold=tmp.get("alert_count_threshold"),
+                        occ_threshold=tmp.get("alert_occ_threshold"),
+                    )
             except Exception:
                 # Si no se puede abrir la fuente, igual dejamos la cámara en BD
                 pass
@@ -157,6 +193,13 @@ def get_processor(cam_id: str, create_if_missing: bool = True) -> Optional[Video
                 return None
             try:
                 vp = VideoProcessor(c.url, cam_id=c.public_id, cam_name=c.name)
+                # Si existen umbrales en memoria, aplicarlos
+                th = _thresholds.get(cam_id)
+                if th:
+                    vp.set_alert_thresholds(
+                        count_threshold=th.get("alert_count_threshold"),
+                        occ_threshold=th.get("alert_occ_threshold"),
+                    )
                 _processors[cam_id] = vp
                 return vp
             except Exception:

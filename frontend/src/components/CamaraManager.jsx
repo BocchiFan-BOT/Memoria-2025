@@ -7,6 +7,8 @@ export default function CameraManager({ cameras, setCameras }) {
     url: "",
     location: "",
     coordinates: "",
+    alert_count_threshold: "",
+    alert_occ_threshold: "",
   });
 
   const onChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
@@ -17,7 +19,10 @@ export default function CameraManager({ cameras, setCameras }) {
       return;
     }
     const id = Date.now().toString();
-    const newCam = { id, ...form };
+  const newCam = { id, ...form };
+  // Limpia vacíos para no enviar strings vacíos
+  if (newCam.alert_count_threshold === "") delete newCam.alert_count_threshold;
+  if (newCam.alert_occ_threshold === "") delete newCam.alert_occ_threshold;
 
     // 1. Actualizar frontend
     const updated = [...cameras, newCam];
@@ -38,7 +43,7 @@ export default function CameraManager({ cameras, setCameras }) {
       console.error("Error registrando cámara en backend:", err);
     }
 
-    setForm({ name: "", url: "", location: "", coordinates: "" });
+  setForm({ name: "", url: "", location: "", coordinates: "", alert_count_threshold: "", alert_occ_threshold: "" });
   };
 
   const remove = async (id) => {
@@ -99,6 +104,33 @@ export default function CameraManager({ cameras, setCameras }) {
           />
         </label>
 
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <label>
+            Umbral conteo (personas)
+            <input
+              name="alert_count_threshold"
+              type="number"
+              min={0}
+              placeholder="Ej: 50 (vacío usa global)"
+              value={form.alert_count_threshold}
+              onChange={onChange}
+            />
+          </label>
+          <label>
+            Umbral ocupación (%)
+            <input
+              name="alert_occ_threshold"
+              type="number"
+              min={0}
+              max={100}
+              step={0.1}
+              placeholder="Ej: 10 (vacío usa global)"
+              value={form.alert_occ_threshold}
+              onChange={onChange}
+            />
+          </label>
+        </div>
+
         <button type="button" className="btn-add" onClick={add}>
           + Agregar cámara
         </button>
@@ -116,6 +148,12 @@ export default function CameraManager({ cameras, setCameras }) {
                 {cam.coordinates ? `– ${cam.coordinates}` : ""}
               </span>
               <span className="camera-item-url">{cam.url}</span>
+              {(cam.alert_count_threshold !== undefined || cam.alert_occ_threshold !== undefined) && (
+                <span className="camera-item-meta">
+                  {cam.alert_count_threshold !== undefined && ` | Thr personas: ${cam.alert_count_threshold}`}
+                  {cam.alert_occ_threshold !== undefined && ` | Thr ocupación: ${cam.alert_occ_threshold}%`}
+                </span>
+              )}
             </div>
             <button
               className="btn-delete"

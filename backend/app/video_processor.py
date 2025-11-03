@@ -457,6 +457,31 @@ class VideoProcessor:
         self._thread.start()
         logger.info("VideoProcessor iniciado para: %s", source)
 
+        # Umbrales de alerta por instancia (None => usa globales)
+        self._alert_count_threshold: Optional[int] = None
+        self._alert_occ_threshold: Optional[float] = None  # porcentaje 0..100
+        self._alert_cooldown_sec: Optional[float] = None
+
+    def set_alert_thresholds(
+        self,
+        count_threshold: Optional[int] = None,
+        occ_threshold: Optional[float] = None,
+        cooldown_sec: Optional[float] = None,
+    ):
+        """
+        Configura umbrales de alerta para esta instancia.
+        Si algún valor es None, mantiene el actual (o deja el global por defecto).
+        """
+        try:
+            if count_threshold is not None:
+                self._alert_count_threshold = int(count_threshold)
+            if occ_threshold is not None:
+                self._alert_occ_threshold = float(occ_threshold)
+            if cooldown_sec is not None:
+                self._alert_cooldown_sec = float(cooldown_sec)
+        except Exception:
+            logger.debug("set_alert_thresholds: valores inválidos", exc_info=True)
+
     # ----------------------------
     # Métricas
     # ----------------------------
@@ -669,10 +694,14 @@ class VideoProcessor:
                 # --- Alertas (nuevo) ---
                 try:
                     crowd_pct = float(self.crowd_ema) * 100.0  # 0..100
+                    # Usa umbrales por instancia si existen; si no, los globales de config
+                    thr_count = int(self._alert_count_threshold) if self._alert_count_threshold is not None else int(ALERT_COUNT_THRESHOLD)
+                    thr_occ = float(self._alert_occ_threshold) if self._alert_occ_threshold is not None else float(ALERT_OCC_THRESHOLD)
+                    thr_cooldown = float(self._alert_cooldown_sec) if self._alert_cooldown_sec is not None else float(ALERT_COOLDOWN_SEC)
                     if (
-                        (self.current_count >= ALERT_COUNT_THRESHOLD)
-                        or (crowd_pct >= ALERT_OCC_THRESHOLD)
-                    ) and (now - self._last_alert_ts >= float(ALERT_COOLDOWN_SEC)):
+                        (self.current_count >= thr_count)
+                        or (crowd_pct >= thr_occ)
+                    ) and (now - self._last_alert_ts >= thr_cooldown):
                         alert = {
                             "cam_id": self.cam_id or str(self.source),
                             "cam_name": self.cam_name or str(self.source),
