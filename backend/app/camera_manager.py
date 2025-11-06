@@ -226,3 +226,28 @@ def get_alerts(since: float | None = None, cam_id: Optional[str] = None):
     # ordenar por tiempo asc
     out.sort(key=lambda a: a.get("t", 0))
     return out
+
+
+def get_metrics_all():
+    """
+    Devuelve métricas de rendimiento de todos los VideoProcessor activos.
+    """
+    out = []
+    with _lock:
+        for cid, vp in _processors.items():
+            try:
+                out.append(vp.get_metrics())
+            except Exception:
+                pass
+    return out
+
+
+def get_metrics_one(cam_id: str) -> Optional[dict]:
+    with _lock:
+        vp = _processors.get(cam_id)
+        if not vp:
+            return None
+        try:
+            return vp.get_metrics()
+        except Exception:
+            return None

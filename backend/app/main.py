@@ -11,7 +11,7 @@ from app.background_task import start_heartbeat_thread
 from app.database.database import SessionLocal
 from app.database import crud, schemas
 from app.auth import router as auth_router, admin_required
-from .camera_manager import list_cameras, add_camera, remove_camera, get_processor, get_alerts
+from .camera_manager import list_cameras, add_camera, remove_camera, get_processor, get_alerts, get_metrics_all, get_metrics_one
 
 app = FastAPI(title="Monitor Inteligente API", version="0.1.0")
 
@@ -64,17 +64,24 @@ def delete_camera(cam_id: str, user=Depends(admin_required)):
 
 #streaming
 @app.get("/stream/{cam_id}")
-def stream(cam_id: str):
+def stream(cam_id: str, fps: int = 8):
     vp = get_processor(cam_id)
     if vp is None:
         raise HTTPException(status_code=404, detail="Cámara no disponible")
 
     def gen():
+        target_dt = 1.0 / max(1, min(60, int(fps)))
+        last_sent = 0.0
         while True:
+            now = time.time()
+            if (now - last_sent) < target_dt:
+                time.sleep(0.005)
+                continue
             frame = vp.get_frame()
             if not frame:
-                time.sleep(0.1)
+                time.sleep(0.05)
                 continue
+            last_sent = time.time()
             yield (
                 b"--frame\r\n"
                 b"Content-Type: image/jpeg\r\n\r\n" + frame + b"\r\n"
@@ -122,6 +129,21 @@ def alerts(since: float | None = None, cam_id: str | None = None):
         return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# métricas
+@app.get("/metrics")
+def metrics():
+    try:
+        return get_metrics_all()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/metrics/{cam_id}")
+def metrics_one(cam_id: str):
+    m = get_metrics_one(cam_id)
+    if not m:
+        raise HTTPException(status_code=404, detail="Cámara no disponible")
+    return m
 
 #sync
 @app.post("/camaras/sync-file")

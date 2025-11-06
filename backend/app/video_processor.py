@@ -325,11 +325,11 @@ class VideoProcessor:
         aggregation_mode="peak",
         # --- Modelo / inferencia ---
         conf=0.30,
-        imgsz=960,
+    imgsz=704,
         model_name="yolov8m-seg.pt",
         device=None,
         half=True,
-        detect_interval=3,
+    detect_interval=4,
         max_reuse_frames=30,
         # --- Tracker / conteo ---
         iou_thresh=0.3,
@@ -350,7 +350,9 @@ class VideoProcessor:
         rate_limit_per_frame=3,
         # --- Rendimiento ---
         flush_grab=True,
-        cache_cleanup_every=300
+        cache_cleanup_every=300,
+        # --- Gating por movimiento ---
+        motion_thresh=2.5
     ):
         self.source = source
         self.cam_id = cam_id
@@ -406,6 +408,7 @@ class VideoProcessor:
         self.cache_cleanup_every = int(cache_cleanup_every)
         self.flush_grab = bool(flush_grab)
         self._last_cache_cleanup = time.time()
+        self.motion_thresh = float(motion_thresh)
 
         # Tracking / conteo
         self.tracker = SortTracker(
@@ -429,8 +432,22 @@ class VideoProcessor:
         self._stop = False
 
         # Alertas (nuevo)
-        self.alerts: deque[Dict[str, Any]] = deque(maxlen=200)
+        self.alerts = deque(maxlen=200)
         self._last_alert_ts = 0.0
+
+        # Métricas de rendimiento (nuevo)
+        self._ema = lambda prev, val, a=0.2: (val if prev is None else (a*val + (1-a)*prev))
+        self._last_loop_ts = None
+        self.fps_ema = None
+        self.grab_ms_ema = None
+        self.infer_ms_ema = None
+        self.loop_ms_ema = None
+        self._metrics_lock = threading.Lock()
+
+        # Umbrales de alerta por instancia (None => usa globales)
+        self._alert_count_threshold = None
+        self._alert_occ_threshold = None  # porcentaje 0..100
+        self._alert_cooldown_sec = None
 
         # Detección / flujo
         self._last_boxes = []
@@ -456,11 +473,6 @@ class VideoProcessor:
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
         logger.info("VideoProcessor iniciado para: %s", source)
-
-        # Umbrales de alerta por instancia (None => usa globales)
-        self._alert_count_threshold: Optional[int] = None
-        self._alert_occ_threshold: Optional[float] = None  # porcentaje 0..100
-        self._alert_cooldown_sec: Optional[float] = None
 
     def set_alert_thresholds(
         self,
@@ -593,12 +605,15 @@ class VideoProcessor:
     def _run(self):
         while not self._stop:
             try:
+                t_loop_start = time.time()
                 if self.flush_grab:
                     for _ in range(0): self.cap.grab()
-
+                t0 = time.time()
                 ret, frame = self.cap.read()
                 if not ret or frame is None:
                     time.sleep(0.005);  continue
+                t1 = time.time()
+                grab_ms = (t1 - t0) * 1000.0
 
                 if self.letterbox_resize:
                     frame, _, _ = letterbox(frame, self.output_size)
@@ -610,6 +625,18 @@ class VideoProcessor:
                 self._frame_idx += 1
                 do_detect = (self._frame_idx % self.detect_interval == 0) or (self._frames_since_detect >= self.max_reuse_frames)
 
+                # Medir movimiento ligero para saltar YOLO si el frame está estable
+                motion_mean = None
+                if self._prev_gray is not None:
+                    try:
+                        # cálculo en int16 para evitar overflow
+                        diff = cv2.absdiff(gray, self._prev_gray)
+                        motion_mean = float(diff.mean())
+                    except Exception:
+                        motion_mean = None
+                if do_detect and (motion_mean is not None) and (motion_mean < self.motion_thresh) and (self._frames_since_detect < self.max_reuse_frames):
+                    do_detect = False
+
                 raw_person_count = 0
                 crowd_index = 0.0
                 tracked = []
@@ -617,6 +644,7 @@ class VideoProcessor:
 
                 if self.model and do_detect:
                     with torch.no_grad() if TORCH_AVAILABLE else _dummy_context():
+                        t_infer0 = time.time()
                         results = self.model.predict(
                             frame[:, :, ::-1],
                             conf=self.conf,
@@ -625,6 +653,8 @@ class VideoProcessor:
                             half=self.use_half,
                             verbose=False
                         )
+                        t_infer1 = time.time()
+                    infer_ms = (t_infer1 - t_infer0) * 1000.0
                     res = results[0]; res_for_draw = res
 
                     # Cajas person (+ NMS extra para evitar solapes residuales)
@@ -717,6 +747,19 @@ class VideoProcessor:
                 self._prev_gray = gray
                 time.sleep(0.001)
 
+                # Actualizar métricas de rendimiento
+                t_loop_end = time.time()
+                loop_ms = (t_loop_end - t_loop_start) * 1000.0
+                with self._metrics_lock:
+                    self.grab_ms_ema = self._ema(self.grab_ms_ema, grab_ms)
+                    if self.model and do_detect:
+                        self.infer_ms_ema = self._ema(self.infer_ms_ema, infer_ms)
+                    self.loop_ms_ema = self._ema(self.loop_ms_ema, loop_ms)
+                    if self._last_loop_ts is not None:
+                        inst_fps = 1.0 / max(1e-6, (t_loop_end - self._last_loop_ts))
+                        self.fps_ema = self._ema(self.fps_ema, inst_fps)
+                    self._last_loop_ts = t_loop_end
+
                 # Limpieza CUDA
                 if _has_cuda() and (time.time() - self._last_cache_cleanup) > self.cache_cleanup_every:
                     try:
@@ -775,6 +818,24 @@ class VideoProcessor:
             try: torch.cuda.empty_cache()
             except Exception: pass
         logger.info("VideoProcessor detenido: %s", self.source)
+
+    # --- NUEVO: Métricas ---
+    def get_metrics(self) -> Dict[str, Any]:
+        with self._metrics_lock:
+            return {
+                "cam_id": self.cam_id or str(self.source),
+                "cam_name": self.cam_name or str(self.source),
+                "fps": round(float(self.fps_ema or 0.0), 2),
+                "grab_ms": round(float(self.grab_ms_ema or 0.0), 2),
+                "infer_ms": round(float(self.infer_ms_ema or 0.0), 2),
+                "loop_ms": round(float(self.loop_ms_ema or 0.0), 2),
+                "count": int(self.current_count),
+                "crowd_index": round(float(self.current_crowd_index), 3),
+                "device": str(self.device),
+                "fp16": bool(self.use_half),
+                "detect_interval": int(self.detect_interval),
+                "imgsz": int(self.imgsz),
+            }
 
 class _dummy_context:
     def __enter__(self): return self

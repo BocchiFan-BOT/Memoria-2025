@@ -32,3 +32,7 @@ export const getReport = () => API.get("/report", { responseType: "blob" });
 // Alertas recientes (opcional ?since=epoch)
 export const getAlerts = (since) =>
   API.get("/alerts", { params: since ? { since } : {} });
+
+// Métricas
+export const getMetricsAll = () => API.get("/metrics");
+export const getMetrics = (camId) => API.get(`/metrics/${camId}`);
