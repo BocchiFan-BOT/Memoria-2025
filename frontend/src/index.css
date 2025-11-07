@@ -274,6 +274,24 @@ html, body, #root {
   cursor: pointer;
   box-shadow: 0 10px 22px rgba(30,111,132,0.28);
 }
+/* Versión modo claro del botón de descarga (fuerza contraste) */
+:root[data-theme="light"] .btn-download,
+:root[data-theme="light"] .btn-download * {
+  color: #0E2A36 !important; /* fuerza texto oscuro, también en hijos */
+}
+
+:root[data-theme="light"] .btn-download {
+  background: linear-gradient(135deg, var(--primary-700), var(--primary));
+  border: 1px solid rgba(30,111,132,0.25);
+  box-shadow: 0 6px 16px rgba(30,111,132,0.18);
+}
+
+:root[data-theme="light"] .btn-download:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(30,111,132,0.25);
+  background: linear-gradient(135deg, var(--primary), var(--primary-700));
+}
+
 .dashboard p strong {
   font-weight: 600;
   font-size: 1.1rem;
@@ -302,6 +320,24 @@ html, body, #root {
   background: rgba(129, 212, 250, 0.28);
   transform: translateY(-1px);
 }
+
+/* Versión modo claro del botón pequeño de reporte */
+:root[data-theme="light"] .btn-report-small,
+:root[data-theme="light"] .btn-report-small * {
+  color: #0E2A36 !important;
+}
+
+:root[data-theme="light"] .btn-report-small {
+  background: rgba(34,138,163,0.14);
+  border: 1px solid rgba(34,138,163,0.35);
+}
+
+:root[data-theme="light"] .btn-report-small:hover {
+  background: rgba(34,138,163,0.22);
+  transform: translateY(-1px);
+}
+
+
 .dash-card-footer {
   display: flex;
   justify-content: flex-start;
@@ -874,6 +910,40 @@ textarea:focus {
   line-height: 1;
   padding: 2px 4px;
   cursor: pointer;
+}
+
+/* alertas para el modo claro */
+:root[data-theme="light"] .toast-card {
+  background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(255,255,255,0.92));
+  border: 1px solid rgba(0,0,0,0.06);
+  border-left: 4px solid #f59e0b;
+  color: #0E2A36;
+  box-shadow: 0 10px 28px rgba(0,0,0,0.12), 0 4px 10px rgba(0,0,0,0.06);
+}
+
+:root[data-theme="light"] .toast--warning { border-left-color: #f59e0b; }
+
+:root[data-theme="light"] .toast-icon {
+  background: rgba(251,191,36,0.18);
+  border: 1px solid rgba(251,191,36,0.35);
+  color: #92400e; 
+}
+
+:root[data-theme="light"] .toast-title {
+  color: #0E2A36;
+}
+
+:root[data-theme="light"] .toast-body {
+  color: #4B6B79;
+}
+
+:root[data-theme="light"] .toast-time {
+  color: #4B6B79;
+  opacity: 0.85;
+}
+
+:root[data-theme="light"] .toast-close {
+  color: rgba(14,42,54,0.7);
 }
 
 
