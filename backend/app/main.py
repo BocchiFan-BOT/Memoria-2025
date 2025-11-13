@@ -214,3 +214,19 @@ def health_check():
         db.close()
 
 
+@app.put("/cameras/{cam_id}")
+async def update_camera(cam_id: str, cam: dict, user=Depends(admin_required)):
+    """
+    Actualiza una cámara existente.
+    Estrategia simple: eliminarla y volver a agregarla con los nuevos datos.
+    """
+    cam["id"] = cam_id
+
+
+    try:
+        remove_camera(cam_id)
+    except Exception:
+        pass
+    add_camera(cam)
+
+    return {"status": "ok"}
