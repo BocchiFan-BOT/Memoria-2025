@@ -249,9 +249,9 @@ export default function CameraManager({ cameras, setCameras }) {
                 cam.alert_occ_threshold !== undefined) && (
                 <span className="camera-item-meta">
                   {cam.alert_count_threshold !== undefined &&
-                    ` | Thr personas: ${cam.alert_count_threshold}`}
+                    ` | Umbral de Conteo: ${cam.alert_count_threshold}`}
                   {cam.alert_occ_threshold !== undefined &&
-                    ` | Thr ocupación: ${cam.alert_occ_threshold}%`}
+                    ` | Umbral de Aglomeración: ${cam.alert_occ_threshold}%`}
                 </span>
               )}
             </div>

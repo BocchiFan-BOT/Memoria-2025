@@ -1,68 +1,75 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pathlib import Path
-from sqlalchemy.exc import IntegrityError
 import time
+import csv
 from pathlib import Path
-from sqlalchemy import text 
+
 from app.config import CORS_ORIGINS
 from app.background_task import start_heartbeat_thread
 from app.database.database import SessionLocal
-from app.database import crud, schemas
+from app.database import crud
 from app.auth import router as auth_router, admin_required
-from .camera_manager import list_cameras, add_camera, remove_camera, get_processor, get_alerts, get_metrics_all, get_metrics_one
+
+from .camera_manager import (
+    list_cameras,
+    add_camera,
+    remove_camera,
+    get_processor,
+    get_alerts,
+    get_metrics_all,
+    get_metrics_one,
+)
 
 app = FastAPI(title="Monitor Inteligente API", version="0.1.0")
 
-#revisa camaras cada 30 seg
+# Heartbeat
 start_heartbeat_thread()
 
-
+# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ORIGINS,        # ["http://localhost:5173"]
-    allow_credentials=True,            # <--- agrega esta línea
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-
-#devuelve token
+# Login
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
 
 
-#camaras (lectura)
+# =====================================================
+# CÁMARAS (CRUD BÁSICO)
+# =====================================================
 @app.get("/cameras")
 def get_cameras():
     return list_cameras()
 
-#camaras 
-@app.post("/cameras")
-async def post_cameras(payload: list, user=Depends(admin_required)):
-    """
-    Reemplaza el set completo de cámaras con el payload recibido.
-    (Destructivo) Elimina todas y vuelve a agregar.
-    """
-    # borrar todas las existentes (por su public_id)
-    for cam in list(list_cameras()):
-        remove_camera(cam["id"])
-    # agregar las nuevas
-    for cam in payload:
-        add_camera(cam)
-    return {"status": "ok", "count": len(payload)}
 
 @app.post("/cameras/add")
 async def add_one_camera(cam: dict, user=Depends(admin_required)):
     add_camera(cam)
     return {"status": "ok"}
 
+
+@app.put("/cameras/{cam_id}")
+async def update_camera(cam_id: str, cam: dict, user=Depends(admin_required)):
+    # forzamos que mantenga el mismo ID
+    cam["id"] = cam_id
+    add_camera(cam)
+    return {"status": "ok"}
+
+
 @app.delete("/cameras/{cam_id}")
 def delete_camera(cam_id: str, user=Depends(admin_required)):
     remove_camera(cam_id)
     return {"status": "ok"}
 
-#streaming
+
+# =====================================================
+# STREAM + COUNT
+# =====================================================
 @app.get("/stream/{cam_id}")
 def stream(cam_id: str, fps: int = 8):
     vp = get_processor(cam_id)
@@ -70,24 +77,32 @@ def stream(cam_id: str, fps: int = 8):
         raise HTTPException(status_code=404, detail="Cámara no disponible")
 
     def gen():
-        target_dt = 1.0 / max(1, min(60, int(fps)))
+        target_dt = 1.0 / max(1, min(60, fps))
         last_sent = 0.0
         while True:
             now = time.time()
-            if (now - last_sent) < target_dt:
+            if now - last_sent < target_dt:
                 time.sleep(0.005)
                 continue
+
             frame = vp.get_frame()
             if not frame:
                 time.sleep(0.05)
                 continue
+
             last_sent = time.time()
             yield (
                 b"--frame\r\n"
-                b"Content-Type: image/jpeg\r\n\r\n" + frame + b"\r\n"
+                b"Content-Type: image/jpeg\r\n\r\n" +
+                frame +
+                b"\r\n"
             )
 
-    return StreamingResponse(gen(), media_type="multipart/x-mixed-replace; boundary=frame")
+    return StreamingResponse(
+        gen(),
+        media_type="multipart/x-mixed-replace; boundary=frame"
+    )
+
 
 @app.get("/count/{cam_id}")
 def count(cam_id: str):
@@ -101,132 +116,56 @@ def history(cam_id: str):
     vp = get_processor(cam_id, create_if_missing=False)
     if vp is None:
         return []
-    return JSONResponse(content=vp.get_history())
+    return vp.get_history()
 
 @app.get("/report/{cam_id}")
 def report(cam_id: str):
-    vp = get_processor(cam_id, create_if_missing=False)
-    if vp is None:
-        raise HTTPException(status_code=404)
-    csv_path = f"app/static/report_{cam_id}.csv"
-    vp.export_csv(csv_path)
-    return FileResponse(
-        csv_path,
-        media_type="text/csv",
-        filename=f"reporte_{cam_id}.csv"
-    )
+    db = SessionLocal()
+    try:
+        cam = crud.get_camara_by_public_id(db, cam_id)
+        if not cam:
+            raise HTTPException(404, "Cámara no encontrada")
 
-# alertas
+        rows = crud.get_historial_by_camara(db, camara_id=cam.id, limit=10000)
+
+        out_path = Path("app/static") / f"reporte_{cam_id}.csv"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with out_path.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["fecha", "conteo", "indice_aglomeracion"])
+            for h in rows:
+                writer.writerow([
+                    h.fecha.isoformat(),
+                    int(h.conteo),
+                    float(h.indice_aglomeracion)
+                ])
+
+        return FileResponse(
+            str(out_path),
+            media_type="text/csv",
+            filename=f"reporte_{cam_id}.csv"
+        )
+    finally:
+        db.close()
+
+
+# =====================================================
+# ALERTAS + MÉTRICAS
+# =====================================================
 @app.get("/alerts")
 def alerts(since: float | None = None, cam_id: str | None = None):
-    """
-    Devuelve alertas recientes agregadas de todas las cámaras.
-    - since: timestamp epoch opcional para traer solo nuevas
-    - cam_id: opcional para filtrar por una cámara
-    """
-    try:
-        data = get_alerts(since=since, cam_id=cam_id)
-        return data
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return get_alerts(since=since, cam_id=cam_id)
 
-# métricas
+
 @app.get("/metrics")
 def metrics():
-    try:
-        return get_metrics_all()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return get_metrics_all()
+
 
 @app.get("/metrics/{cam_id}")
 def metrics_one(cam_id: str):
     m = get_metrics_one(cam_id)
     if not m:
-        raise HTTPException(status_code=404, detail="Cámara no disponible")
+        raise HTTPException(404, "Cámara no disponible")
     return m
-
-#sync
-@app.post("/camaras/sync-file")
-def sync_camaras_from_file(user=Depends(admin_required)):
-    """
-    Upsert desde backend/app/database/camaras.json sin borrar otras cámaras.
-    Devuelve cuántas insertó y cuántas actualizó.
-    """
-    json_path = Path(__file__).parent  / "database" / "cameras.json"
-    if not json_path.exists():
-        raise HTTPException(status_code=404, detail="No se encontró cameras.json en app/database")
-
-    db = SessionLocal()
-    try:
-        inserted, updated = crud.sync_camaras_from_file(db, json_path)
-        db.commit()
-        return {"inserted": inserted, "updated": updated}
-    except IntegrityError as e:
-        db.rollback()
-        raise HTTPException(status_code=409, detail=f"Integridad (duplicados): {getattr(e, 'orig', e)}")
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        db.close()
-
-@app.post("/camaras/sync")
-def sync_camaras_from_payload(payload: list[dict], user=Depends(admin_required)):
-    """
-    Upsert de una lista de cámaras enviada por el frontend, sin borrar las demás.
-    Devuelve insertadas/actualizadas.
-    """
-    db = SessionLocal()
-    inserted = updated = 0
-    try:
-        for item in payload:
-            j = schemas.CamaraFromJSON.model_validate(item)  # valida/normaliza
-            _, action = crud.upsert_camara_from_json(db, j)
-            if action == "inserted":
-                inserted += 1
-            else:
-                updated += 1
-        db.commit()
-        return {"inserted": inserted, "updated": updated}
-    except IntegrityError as e:
-        db.rollback()
-        raise HTTPException(status_code=409, detail=f"Integridad (duplicados): {getattr(e, 'orig', e)}")
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        db.close()
-
-
-
-@app.get("/health")
-def health_check():
-    """
-    Verifica conexión con la base de datos y devuelve estado general.
-    """
-    db = SessionLocal()
-    try:
-        db.execute(text("SELECT 1"))  # ← cambia esta línea
-        return {"status": "ok", "database": "connected"}
-    except Exception as e:
-        return {"status": "error", "database": str(e)}
-    finally:
-        db.close()
-
-
-@app.put("/cameras/{cam_id}")
-async def update_camera(cam_id: str, cam: dict, user=Depends(admin_required)):
-    """
-    Actualiza una cámara existente.
-    Estrategia simple: eliminarla y volver a agregarla con los nuevos datos.
-    """
-    cam["id"] = cam_id
-
-
-    try:
-        remove_camera(cam_id)
-    except Exception:
-        pass
-    add_camera(cam)
-
-    return {"status": "ok"}

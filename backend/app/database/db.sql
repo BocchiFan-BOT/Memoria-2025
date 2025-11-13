@@ -19,3 +19,8 @@ CREATE TABLE camaras (
   KEY ix_camaras_is_online (is_online),
   KEY ix_camaras_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;
+
+
+ALTER TABLE camaras
+ADD COLUMN alert_count_threshold INT NULL AFTER longitude,
+ADD COLUMN alert_occ_threshold DECIMAL(5,2) NULL AFTER alert_count_threshold;

@@ -6,6 +6,10 @@ import os, logging, traceback
 import numpy as np
 from typing import List, Tuple, Optional, Dict, Any
 
+# Tabla historial
+from app.database.database import SessionLocal
+from app.database import crud
+
 # --- Umbrales de alertas (con fallback seguro si no están en config) ---
 try:
     from app.config import ALERT_COUNT_THRESHOLD, ALERT_OCC_THRESHOLD, ALERT_COOLDOWN_SEC
@@ -434,6 +438,10 @@ class VideoProcessor:
         # Alertas (nuevo)
         self.alerts = deque(maxlen=200)
         self._last_alert_ts = 0.0
+        
+        # Historial BD (guardar cada N recolecciones)
+        self._hist_save_every = 5
+        self._hist_save_counter = 0
 
         # Métricas de rendimiento (nuevo)
         self._ema = lambda prev, val, a=0.2: (val if prev is None else (a*val + (1-a)*prev))
@@ -584,20 +592,67 @@ class VideoProcessor:
         except Exception:
             logger.debug("Error overlay: %s", traceback.format_exc())
 
+    def _save_historial_sample(self, count: int, crowd_index: float):
+        """
+        Inserta un registro en la tabla 'historial' usando la cámara asociada.
+        Usa self.cam_id como public_id para buscar el id entero real.
+        """
+        if not self.cam_id:
+            return
+
+        db = SessionLocal()
+        try:
+            # Buscar la cámara por public_id
+            cam = crud.get_camara_by_public_id(db, self.cam_id)
+            if not cam:
+                return
+
+            # crowd_index en BD: guardamos 0.0–1.0 con 1 decimal
+            ci = round(float(crowd_index), 1)
+
+            crud.create_historial_entry(
+                db=db,
+                camara_id=int(cam.id),
+                conteo=int(count),
+                indice_aglomeracion=ci,
+            )
+        except Exception:
+            logger.debug("Error guardando en historial", exc_info=True)
+        finally:
+            db.close()
+
     def _aggregate_and_commit_window(self):
-        if not self._window_samples: return
+        if not self._window_samples:
+            return
         arr = np.array(self._window_samples)
-        t_values, counts, crowds = arr[:,0], arr[:,1], arr[:,2]
+        t_values, counts, crowds = arr[:, 0], arr[:, 1], arr[:, 2]
+
         if self.aggregation_mode == "peak":
-            idx = int(np.argmax(crowds)); t_sel, c_sel, cr_sel = float(t_values[idx]), int(counts[idx]), float(crowds[idx])
+            idx = int(np.argmax(crowds))
+            t_sel, c_sel, cr_sel = float(t_values[idx]), int(counts[idx]), float(crowds[idx])
         elif self.aggregation_mode == "mean":
             t_sel, c_sel, cr_sel = float(t_values[-1]), int(round(float(counts.mean()))), float(crowds.mean())
         elif self.aggregation_mode == "median":
             t_sel, c_sel, cr_sel = float(t_values[-1]), int(round(float(np.median(counts)))), float(np.median(crowds))
         else:
-            idx = int(np.argmax(crowds)); t_sel, c_sel, cr_sel = float(t_values[idx]), int(counts[idx]), float(crowds[idx])
+            idx = int(np.argmax(crowds))
+            t_sel, c_sel, cr_sel = float(t_values[idx]), int(counts[idx]), float(crowds[idx])
+
+        # Guardar en historial en memoria
         self.count_history.append((t_sel, c_sel, cr_sel))
-        self._window_samples.clear(); self._window_start_t = time.time()
+
+        # Contador para saber cada cuántas recolecciones persistir en BD
+        self._hist_save_counter += 1
+        if self._hist_save_counter >= self._hist_save_every:
+            try:
+                self._save_historial_sample(c_sel, cr_sel)
+            except Exception:
+                logger.debug("Error al guardar historial en BD", exc_info=True)
+            self._hist_save_counter = 0
+
+        # Reiniciar ventana
+        self._window_samples.clear()
+        self._window_start_t = time.time()
 
     # ----------------------------
     # Bucle principal

@@ -4,6 +4,30 @@ import { Line } from "react-chartjs-2";
 import Chart from "chart.js/auto";
 import CrowdBar from "./CrowdBar";
 
+const handleDownloadReport = async (camId, camName) => {
+  try {
+    const resp = await fetch(`http://localhost:8000/report/${camId}`);
+    if (!resp.ok) {
+      console.error("Error al descargar reporte", resp.status);
+      return;
+    }
+
+    const blob = await resp.blob();
+    const url = window.URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    const safeName = (camName || camId || "camara").replace(/[^a-zA-Z0-9_-]/g, "_");
+    a.download = `reporte_${safeName}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (err) {
+    console.error("Error descargando reporte:", err);
+  }
+};
+
 export default function DashboardGrid({ cameras = [] }) {
   const [histories, setHistories] = useState({});
 
@@ -100,7 +124,7 @@ export default function DashboardGrid({ cameras = [] }) {
               <button
                 type="button"
                 className="btn-report-small"
-                onClick={() => console.log("Reporte de cámara", cam.id)}
+                onClick={() => handleDownloadReport(cam.id, cam.name)}
               >
                 Descargar reporte
               </button>

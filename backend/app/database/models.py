@@ -1,7 +1,8 @@
 from sqlalchemy import (
-    Column, BigInteger, String, Numeric, Enum, Boolean,
+    Column, BigInteger, String, Numeric, Enum, Boolean, Integer, SmallInteger,
     DateTime, UniqueConstraint, Index, func
 )
+from datetime import datetime 
 from .database import Base, engine
 
 class Camara(Base):
@@ -14,6 +15,8 @@ class Camara(Base):
     location = Column(String(120), nullable=True)
     latitude = Column(Numeric(9, 6), nullable=True)
     longitude = Column(Numeric(9, 6), nullable=True)
+    alert_count_threshold = Column(Integer, nullable=True)
+    alert_occ_threshold = Column(Numeric(5, 2), nullable=True)
     status = Column(Enum("ACTIVE", "INACTIVE", name="status_enum"), nullable=False, default="ACTIVE")
     is_online = Column(Boolean, nullable=False, default=False)
     last_heartbeat = Column(DateTime, nullable=True)
@@ -31,7 +34,14 @@ class Camara(Base):
 
     def __repr__(self):
         return f"<Camara id={self.id} name={self.name!r} url={self.url!r}>"
+    
+class Historial(Base):
+    __tablename__ = "historial"
 
+    fecha = Column(DateTime, primary_key=True, nullable=False, default=datetime.utcnow)
+    camara_id = Column(Integer, primary_key=True, nullable=False)
+    conteo = Column(SmallInteger, nullable=False)
+    indice_aglomeracion = Column(Numeric(2, 1), nullable=False)
 #crea tablas en mysql
 if __name__ == "__main__":
     Base.metadata.create_all(bind=engine)
