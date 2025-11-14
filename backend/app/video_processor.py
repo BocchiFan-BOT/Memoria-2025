@@ -362,6 +362,10 @@ class VideoProcessor:
         self.cam_id = cam_id
         self.cam_name = cam_name
 
+        self._alert_count_threshold = None
+        self._alert_occ_threshold = None
+        self._alert_cooldown_sec = 10
+
         # RTSP baja latencia
         if isinstance(source, str) and source.lower().startswith("rtsp"):
             opts = "rtsp_transport;udp|max_delay;0|buffer_size;1024|stimeout;2000000|rw_timeout;2000000|reorder_queue_size;0|fpsprobesize;0|analyzeduration;0|max_analyze_duration;0|probesize;32|flags;low_delay|fflags;nobuffer"
@@ -452,10 +456,18 @@ class VideoProcessor:
         self.loop_ms_ema = None
         self._metrics_lock = threading.Lock()
 
-        # Umbrales de alerta por instancia (None => usa globales)
-        self._alert_count_threshold = None
-        self._alert_occ_threshold = None  # porcentaje 0..100
-        self._alert_cooldown_sec = None
+        try:
+            db = SessionLocal()
+            cam = crud.get_camara_by_public_id(db, cam_id)
+            if cam:
+                if cam.alert_count_threshold is not None:
+                    self._alert_count_threshold = cam.alert_count_threshold
+                if cam.alert_occ_threshold is not None:
+                    self._alert_occ_threshold = cam.alert_occ_threshold
+                if hasattr(cam, "alert_cooldown_sec") and cam.alert_cooldown_sec is not None:
+                    self._alert_cooldown_sec = cam.alert_cooldown_sec
+        finally:
+            db.close()
 
         # Detección / flujo
         self._last_boxes = []
@@ -780,22 +792,30 @@ class VideoProcessor:
                 try:
                     crowd_pct = float(self.crowd_ema) * 100.0  # 0..100
                     # Usa umbrales por instancia si existen; si no, los globales de config
-                    thr_count = int(self._alert_count_threshold) if self._alert_count_threshold is not None else int(ALERT_COUNT_THRESHOLD)
-                    thr_occ = float(self._alert_occ_threshold) if self._alert_occ_threshold is not None else float(ALERT_OCC_THRESHOLD)
-                    thr_cooldown = float(self._alert_cooldown_sec) if self._alert_cooldown_sec is not None else float(ALERT_COOLDOWN_SEC)
+                    thr_count = self._alert_count_threshold
+                    thr_occ = self._alert_occ_threshold
+                    thr_cooldown = 30
                     if (
                         (self.current_count >= thr_count)
                         or (crowd_pct >= thr_occ)
                     ) and (now - self._last_alert_ts >= thr_cooldown):
-                        alert = {
-                            "cam_id": self.cam_id or str(self.source),
-                            "cam_name": self.cam_name or str(self.source),
-                            "t": now,
-                            "count": int(self.current_count),
-                            "occupancy": round(crowd_pct, 1),
-                        }
-                        self.alerts.append(alert)
-                        self._last_alert_ts = now
+                        should_alert = False
+                        if thr_count is not None and self.current_count >= thr_count:
+                            should_alert = True
+
+                        if thr_occ is not None and crowd_pct >= thr_occ:
+                            should_alert = True
+
+                        if should_alert and (now - self._last_alert_ts >= thr_cooldown):
+                            alert = {
+                                "cam_id": self.cam_id,
+                                "cam_name": self.cam_name,
+                                "t": now,
+                                "count": int(self.current_count),
+                                "occupancy": round(crowd_pct, 1)
+                            }
+                            self.alerts.append(alert)
+                            self._last_alert_ts = now
                 except Exception:
                     logger.debug("Fallo generando alerta: %s", traceback.format_exc())
 

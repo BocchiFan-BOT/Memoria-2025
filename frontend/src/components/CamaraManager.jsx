@@ -34,7 +34,21 @@ export default function CameraManager({ cameras, setCameras }) {
     }
 
     const id = Date.now().toString();
-    const newCam = { id, ...form };
+
+    const [lat, lon] = form.coordinates
+      ? form.coordinates.split(",").map(x => parseFloat(x.trim()))
+      : [null, null];
+
+    const newCam = {
+      id,
+      name: form.name,
+      url: form.url,
+      location: form.location,
+      latitude: lat,
+      longitude: lon,
+      alert_count_threshold: form.alert_count_threshold || undefined,
+      alert_occ_threshold: form.alert_occ_threshold || undefined
+    };
 
     // Limpia vacíos para no enviar strings vacíos
     if (newCam.alert_count_threshold === "") delete newCam.alert_count_threshold;
@@ -90,7 +104,11 @@ export default function CameraManager({ cameras, setCameras }) {
       name: cam.name || "",
       url: cam.url || "",
       location: cam.location || "",
-      coordinates: cam.coordinates || "",
+      coordinates:
+        cam.coordinates ||
+        (cam.latitude !== undefined && cam.longitude !== undefined
+          ? `${cam.latitude}, ${cam.longitude}`
+          : ""),
       alert_count_threshold:
         cam.alert_count_threshold !== undefined
           ? cam.alert_count_threshold
@@ -112,15 +130,19 @@ export default function CameraManager({ cameras, setCameras }) {
       return;
     }
 
-    // Construir payload para backend
+    const [lat, lon] = editForm.coordinates
+      ? editForm.coordinates.split(",").map(x => parseFloat(x.trim()))
+      : [null, null];
+
     const payload = {
       id: editingCam.id,
       name: editForm.name,
       url: editForm.url,
       location: editForm.location,
-      coordinates: editForm.coordinates,
-      alert_count_threshold: editForm.alert_count_threshold,
-      alert_occ_threshold: editForm.alert_occ_threshold,
+      latitude: lat,
+      longitude: lon,
+      alert_count_threshold: editForm.alert_count_threshold || undefined,
+      alert_occ_threshold: editForm.alert_occ_threshold || undefined
     };
 
     if (payload.alert_count_threshold === "")

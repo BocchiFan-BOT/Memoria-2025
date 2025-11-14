@@ -11,6 +11,8 @@ from app.database.database import SessionLocal
 from app.database import crud
 from app.auth import router as auth_router, admin_required
 
+from app.database.schemas import CamaraUpdate
+
 from .camera_manager import (
     list_cameras,
     add_camera,
@@ -53,12 +55,27 @@ async def add_one_camera(cam: dict, user=Depends(admin_required)):
     return {"status": "ok"}
 
 
+
 @app.put("/cameras/{cam_id}")
-async def update_camera(cam_id: str, cam: dict, user=Depends(admin_required)):
-    # forzamos que mantenga el mismo ID
-    cam["id"] = cam_id
-    add_camera(cam)
-    return {"status": "ok"}
+async def update_camera(cam_id: str, payload: CamaraUpdate, user=Depends(admin_required)):
+    db = SessionLocal()
+    try:
+        cam = crud.get_camara_by_public_id(db, cam_id)
+        if not cam:
+            raise HTTPException(404, "Cámara no encontrada")
+
+        updated = crud.update_camara(db, cam, payload)
+        from .camera_manager import get_processor
+        vp = get_processor(cam_id, create_if_missing=True)
+        vp.set_alert_thresholds(
+            count_threshold=updated.alert_count_threshold,
+            occ_threshold=updated.alert_occ_threshold,
+        )
+
+        return {"status": "ok"}
+
+    finally:
+        db.close()
 
 
 @app.delete("/cameras/{cam_id}")
