@@ -354,10 +354,12 @@ class VideoProcessor:
         rate_limit_per_frame=3,
         # --- Rendimiento ---
         flush_grab=True,
+        flush_grab_count=0,
         cache_cleanup_every=300,
         # --- Gating por movimiento ---
         motion_thresh=2.5
     ):
+        self.original_source = source
         self.source = source
         self.cam_id = cam_id
         self.cam_name = cam_name
@@ -366,13 +368,37 @@ class VideoProcessor:
         self._alert_occ_threshold = None
         self._alert_cooldown_sec = 10
 
-        # RTSP baja latencia
-        if isinstance(source, str) and source.lower().startswith("rtsp"):
-            opts = "rtsp_transport;udp|max_delay;0|buffer_size;1024|stimeout;2000000|rw_timeout;2000000|reorder_queue_size;0|fpsprobesize;0|analyzeduration;0|max_analyze_duration;0|probesize;32|flags;low_delay|fflags;nobuffer"
-            os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", opts)
-            self.cap = cv2.VideoCapture(source, cv2.CAP_FFMPEG)
+        # YouTube resolver (opcional)
+        self._is_youtube = False
+        self._yt_last_resolve = 0.0
+        self._yt_resolved_url = None
+
+        # RTSP baja latencia / YouTube
+        def _is_youtube_url(u: str) -> bool:
+            u = (u or "").lower()
+            return ("youtube.com" in u) or ("youtu.be" in u)
+
+        self._is_youtube = isinstance(self.source, str) and _is_youtube_url(self.source)
+
+        def _open_from_source(u: str):
+            if isinstance(u, str) and u.lower().startswith("rtsp"):
+                opts = "rtsp_transport;udp|max_delay;0|buffer_size;1024|stimeout;2000000|rw_timeout;2000000|reorder_queue_size;0|fpsprobesize;0|analyzeduration;0|max_analyze_duration;0|probesize;32|flags;low_delay|fflags;nobuffer"
+                os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", opts)
+                return cv2.VideoCapture(u, cv2.CAP_FFMPEG)
+            return cv2.VideoCapture(u)
+
+        # Si es YouTube, intenta resolver a una URL directa (m3u8) con yt-dlp
+        self.cap = None
+        if self._is_youtube:
+            try:
+                resolved = self._resolve_youtube(self.source)
+                self._yt_resolved_url = resolved or self.source
+                self.cap = _open_from_source(self._yt_resolved_url)
+            except Exception:
+                logger.exception("Fallo resolviendo YouTube; se intentará abrir directamente")
+                self.cap = _open_from_source(self.source)
         else:
-            self.cap = cv2.VideoCapture(source)
+            self.cap = _open_from_source(self.source)
         if not self.cap.isOpened():
             raise RuntimeError(f"No se pudo abrir la fuente: {source}")
         try: self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
@@ -415,6 +441,7 @@ class VideoProcessor:
         self.aggregation_mode = aggregation_mode.lower()
         self.cache_cleanup_every = int(cache_cleanup_every)
         self.flush_grab = bool(flush_grab)
+        self.flush_grab_count = max(0, int(flush_grab_count))
         self._last_cache_cleanup = time.time()
         self.motion_thresh = float(motion_thresh)
 
@@ -493,6 +520,68 @@ class VideoProcessor:
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
         logger.info("VideoProcessor iniciado para: %s", source)
+
+    # --- YouTube: resolver streaming con yt-dlp (si disponible) ---
+    def _resolve_youtube(self, url: str) -> Optional[str]:
+        try:
+            import yt_dlp  # type: ignore
+        except Exception:
+            logger.warning("yt-dlp no instalado: no se puede resolver YouTube (%s)", url)
+            return None
+        try:
+            ydl_opts = {
+                "quiet": True,
+                "skip_download": True,
+                "format": "best",  # para live m3u8
+            }
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                return info.get("url")
+        except Exception:
+            logger.debug("Fallo yt-dlp: %s", traceback.format_exc())
+            return None
+
+    def _reopen_capture(self, backoff_sec: float = 2.0) -> bool:
+        try:
+            try:
+                if self.cap is not None:
+                    self.cap.release()
+            except Exception:
+                pass
+
+            src = self.original_source
+            if self._is_youtube:
+                # Re-resolver periódicamente (tokens expiran)
+                if (time.time() - self._yt_last_resolve) > 60:
+                    resolved = self._resolve_youtube(src)
+                    if resolved:
+                        self._yt_resolved_url = resolved
+                        self._yt_last_resolve = time.time()
+                use = self._yt_resolved_url or src
+            else:
+                use = src
+
+            if isinstance(use, str) and use.lower().startswith("rtsp"):
+                opts = "rtsp_transport;udp|max_delay;0|buffer_size;1024|stimeout;2000000|rw_timeout;2000000|reorder_queue_size;0|fpsprobesize;0|analyzeduration;0|max_analyze_duration;0|probesize;32|flags;low_delay|fflags;nobuffer"
+                os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", opts)
+                self.cap = cv2.VideoCapture(use, cv2.CAP_FFMPEG)
+            else:
+                self.cap = cv2.VideoCapture(use)
+
+            ok = self.cap.isOpened()
+            if ok:
+                try: self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                except Exception: pass
+                logger.info("Reconexion exitosa a fuente: %s", use)
+                return True
+            else:
+                logger.warning("No se pudo reabrir la fuente; reintento en %.1fs", backoff_sec)
+                time.sleep(backoff_sec)
+                return False
+        except Exception as e:
+            logger.exception("Error reabriendo captura: %s", e)
+            time.sleep(backoff_sec)
+            return False
 
     def set_alert_thresholds(
         self,
@@ -670,15 +759,29 @@ class VideoProcessor:
     # Bucle principal
     # ----------------------------
     def _run(self):
+        consecutive_fail = 0
+        last_adapt = 0.0
         while not self._stop:
             try:
                 t_loop_start = time.time()
-                if self.flush_grab:
-                    for _ in range(0): self.cap.grab()
+                if self.flush_grab and self.flush_grab_count > 0:
+                    for _ in range(self.flush_grab_count):
+                        try:
+                            self.cap.grab()
+                        except Exception:
+                            break
                 t0 = time.time()
                 ret, frame = self.cap.read()
                 if not ret or frame is None:
-                    time.sleep(0.005);  continue
+                    consecutive_fail += 1
+                    # Si demasiados fallos seguidos, reintentar reconectar
+                    if consecutive_fail >= 60 or (self.cap is not None and not self.cap.isOpened()):
+                        self._reopen_capture(backoff_sec=2.0)
+                        consecutive_fail = 0
+                    time.sleep(0.01)
+                    continue
+                else:
+                    consecutive_fail = 0
                 t1 = time.time()
                 grab_ms = (t1 - t0) * 1000.0
 
@@ -835,6 +938,20 @@ class VideoProcessor:
                         self.fps_ema = self._ema(self.fps_ema, inst_fps)
                     self._last_loop_ts = t_loop_end
 
+                # Adaptación simple del detect_interval para multicámara
+                # Objetivo: mantener ~8 fps por cámara si es posible
+                now_adapt = time.time()
+                if (now_adapt - last_adapt) > 5.0:
+                    try:
+                        cur_fps = float(self.fps_ema or 0.0)
+                        if cur_fps < 5.0 and self.detect_interval < 10:
+                            self.detect_interval += 1
+                        elif cur_fps > 10.0 and self.detect_interval > 2:
+                            self.detect_interval -= 1
+                    except Exception:
+                        pass
+                    last_adapt = now_adapt
+
                 # Limpieza CUDA
                 if _has_cuda() and (time.time() - self._last_cache_cleanup) > self.cache_cleanup_every:
                     try:
@@ -854,7 +971,7 @@ class VideoProcessor:
         if self.current_frame is None:
             return None
         try:
-            ret, jpeg = cv2.imencode('.jpg', self.current_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+            ret, jpeg = cv2.imencode('.jpg', self.current_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 72])
             if not ret: return None
             return jpeg.tobytes()
         except Exception:

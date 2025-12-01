@@ -8,3 +8,4 @@ SQLAlchemy
 PyMySQL
 python-dotenv
 python-jose[cryptography]
+yt-dlp
